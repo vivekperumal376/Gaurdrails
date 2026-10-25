@@ -1,0 +1,80 @@
+{
+  "info": {
+    "name": "Guardrail Gateway - Phase 01 API Setup and Health Check",
+    "description": "Checks public liveness/readiness endpoints and safe handling of unknown routes.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" }
+  ],
+  "item": [
+    {
+      "name": "Liveness (200 UP)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/health"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('returns 200', function () { pm.response.to.have.status(200); });",
+            "pm.test('reports service as UP', function () {",
+            "  const body = pm.response.json();",
+            "  pm.expect(body.status).to.eql('UP');",
+            "  pm.expect(body.service).to.eql('genai-guardrail-gateway');",
+            "  pm.expect(pm.response.headers.get('X-Request-Id')).to.match(/^req_[0-9a-f-]+$/i);",
+            "});"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "Readiness (200 READY)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/ready"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('returns 200', function () { pm.response.to.have.status(200); });",
+            "pm.test('reports loaded policy version', function () {",
+            "  const body = pm.response.json();",
+            "  pm.expect(body.status).to.eql('READY');",
+            "  pm.expect(body.policyVersion).to.be.a('string').and.not.empty;",
+            "});"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "Unknown route returns safe 404",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/phase-01-unknown-route"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('returns 404 NOT_FOUND', function () {",
+            "  pm.response.to.have.status(404);",
+            "  const body = pm.response.json();",
+            "  pm.expect(body.error).to.eql('NOT_FOUND');",
+            "  pm.expect(body.requestId).to.be.a('string');",
+            "});",
+            "pm.test('does not expose a stack trace', function () { pm.expect(pm.response.text()).not.to.include(' at '); });"
+          ]
+        }
+      }]
+    }
+  ]
+}

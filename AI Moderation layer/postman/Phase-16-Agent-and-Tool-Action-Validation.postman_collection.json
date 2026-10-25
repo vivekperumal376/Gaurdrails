@@ -1,0 +1,224 @@
+{
+  "info": {
+    "name": "Guardrail Gateway - Phase 16 Agent and Tool-Action Validation",
+    "description": "Validates policy-based tool allowlists, JWT authorization, parameter constraints, human approval escalation, and action ID replay rejection. Validation only; the gateway never executes tools.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "userToken", "value": "" },
+    { "key": "supportAgentToken", "value": "" },
+    { "key": "customerAdminToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Read-only search is allowed",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"actionId\": \"postman-search-001\",\n  \"tool\": \"searchKnowledge\",\n  \"action\": \"search\",\n  \"arguments\": {\"query\": \"approved product limits\"}\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/tools/validate-action"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('allows configured read-only action', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.decision).to.eql('ALLOW');",
+              "  pm.expect(body.approvalRequired).to.eql(false);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Unknown tool is blocked",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"actionId\": \"postman-unknown-001\",\n  \"tool\": \"unknownTool\",\n  \"action\": \"execute\",\n  \"arguments\": {}\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/tools/validate-action"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('blocks unknown tool/action', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.decision).to.eql('BLOCK');",
+              "  pm.expect(body.reason).to.eql('TOOL_OR_ACTION_NOT_ALLOWED');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Delete action requires approval",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{customerAdminToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"actionId\": \"postman-delete-001\",\n  \"tool\": \"customer\",\n  \"action\": \"delete\",\n  \"arguments\": {\"customerId\": \"CUST-001\", \"tenantId\": \"TENANT-A\"}\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/tools/validate-action"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('escalates high-impact deletion for approval', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.decision).to.eql('ESCALATE');",
+              "  pm.expect(body.approvalRequired).to.eql(true);",
+              "  pm.expect(body.reviewReason).to.eql('HIGH_IMPACT_ACTION');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Recipient domain tampering is blocked",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{supportAgentToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"actionId\": \"postman-email-001\",\n  \"tool\": \"email\",\n  \"action\": \"send\",\n  \"arguments\": {\"recipient\": \"approved@attacker.example\", \"templateId\": \"WELCOME-01\"}\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/tools/validate-action"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('blocks recipient outside allowed domain', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.decision).to.eql('BLOCK');",
+              "  pm.expect(body.reason).to.eql('RECIPIENT_DOMAIN_NOT_ALLOWED');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Body role does not grant support-agent access",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"actionId\": \"postman-email-spoof-001\",\n  \"tool\": \"email\",\n  \"action\": \"send\",\n  \"roles\": [\"support-agent\"],\n  \"arguments\": {\"recipient\": \"approved@example.com\", \"templateId\": \"WELCOME-01\"}\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/tools/validate-action"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('does not trust caller-supplied role', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.decision).to.eql('BLOCK');",
+              "  pm.expect(body.reason).to.eql('USER_NOT_AUTHORIZED');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Replay protection first request",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"actionId\": \"postman-replay-001\",\n  \"tool\": \"searchKnowledge\",\n  \"action\": \"search\",\n  \"arguments\": {\"query\": \"approved product limits\"}\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/tools/validate-action"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('first action ID use is allowed', function () {",
+              "  pm.response.to.have.status(200);",
+              "  pm.expect(pm.response.json().decision).to.eql('ALLOW');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Replay protection rejects repeated action ID",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"actionId\": \"postman-replay-001\",\n  \"tool\": \"searchKnowledge\",\n  \"action\": \"search\",\n  \"arguments\": {\"query\": \"approved product limits\"}\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/tools/validate-action"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('rejects repeated action ID', function () {",
+              "  pm.response.to.have.status(409);",
+              "  pm.expect(pm.response.json().error).to.eql('ACTION_REPLAYED');",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

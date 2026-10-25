@@ -1,0 +1,167 @@
+{
+  "info": {
+    "name": "Guardrail Gateway - Phase 07 File Upload Validation",
+    "description": "Postman validation for safe PDF uploads, MIME and magic-byte checks, oversized payload rejection, and traversal-safe filenames.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "testerToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Allowed PDF upload (200)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "",
+              "description": "Upload a valid PDF file.",
+              "value": "report.pdf"
+            }
+          ]
+        },
+        "url": "{{baseUrl}}/api/v1/validate/file"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('allows a valid PDF', function () { pm.response.to.have.status(200); });",
+              "pm.test('returns valid upload response', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.valid).to.eql(true);",
+              "  pm.expect(body.detectedType).to.eql('application/pdf');",
+              "  pm.expect(body.recommendedAction).to.eql('ALLOW');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Renamed EXE disguised as PDF (415)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "",
+              "description": "Renamed PE file with MZ header but PDF extension.",
+              "value": "report.pdf"
+            }
+          ]
+        },
+        "url": "{{baseUrl}}/api/v1/validate/file"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('rejects disguised executable', function () { pm.response.to.have.status(415); });",
+              "pm.test('returns unsupported media signal', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.error).to.eql('UNSUPPORTED_MEDIA_TYPE');",
+              "  pm.expect(body.recommendedAction).to.eql('BLOCK');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Oversized file (413)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "",
+              "description": "A file larger than the configured request byte budget.",
+              "value": "large.pdf"
+            }
+          ]
+        },
+        "url": "{{baseUrl}}/api/v1/validate/file"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('rejects oversized upload', function () { pm.response.to.have.status(413); });",
+              "pm.test('returns payload limit signal', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.error).to.eql('PAYLOAD_TOO_LARGE');",
+              "  pm.expect(body.recommendedAction).to.eql('BLOCK');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Traversal filename sanitization (200)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "",
+              "description": "File with traversal path in the original upload name.",
+              "value": "../../escape.pdf"
+            }
+          ]
+        },
+        "url": "{{baseUrl}}/api/v1/validate/file"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('sanitizes traversal names before validation', function () { pm.response.to.have.status(200); });",
+              "pm.test('returns safe filename in response', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.valid).to.eql(true);",
+              "  pm.expect(body.fileName).to.eql('escape.pdf');",
+              "  pm.expect(body.recommendedAction).to.eql('ALLOW');",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

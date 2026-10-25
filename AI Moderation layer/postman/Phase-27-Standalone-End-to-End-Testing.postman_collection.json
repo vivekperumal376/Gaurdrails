@@ -1,0 +1,233 @@
+{
+  "info": {
+    "name": "Guardrail Gateway - Phase 27 Standalone End-to-End Testing",
+    "description": "End-to-end regression pack for authenticated request flow, auth rejection, PII masking, secret detection, harassment fixture, crisis fixture, and fail-safe dependency behavior.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3001" },
+    { "key": "userToken", "value": "" },
+    { "key": "testerToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "01 Valid authenticated safe text flow",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content\": \"A safe message for a normal user request.\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/moderate"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('allows a valid authenticated safe request', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(pm.response.code).to.eql(200);",
+              "  pm.expect(body.normalizedContent).to.eql('A safe message for a normal user request.');",
+              "  pm.expect(body.requestId).to.match(/^req_[0-9a-f-]+$/i);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Missing auth is rejected",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content\": \"Should fail without auth.\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/moderate"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('rejects a request without authentication', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(pm.response.code).to.eql(401);",
+              "  pm.expect(body.error).to.eql('UNAUTHENTICATED');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Wrong role is rejected",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content\": \"Should fail with tester role on user route.\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/moderate"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('rejects a request with the wrong role', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(pm.response.code).to.eql(403);",
+              "  pm.expect(body.error).to.eql('FORBIDDEN');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 PII is masked by the specialist route",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content\": \"Contact me at bob@example.com or (415) 555-0123.\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/detect/pii"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('masks email and phone values', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(pm.response.code).to.eql(200);",
+              "  pm.expect(body.matched).to.eql(true);",
+              "  pm.expect(body.category).to.eql('EMAIL_ADDRESS');",
+              "  pm.expect(body.sanitizedContent).to.include('<EMAIL_MASKED>');",
+              "  pm.expect(body.sanitizedContent).to.include('<PHONE_MASKED>');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Secret is detected and blocked",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content\": \"api_key = demo-secret-value-12345\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/detect/secrets"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('detects a secret and returns the category', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(pm.response.code).to.eql(200);",
+              "  pm.expect(body.matched).to.eql(true);",
+              "  pm.expect(body.category).to.eql('API_KEY');",
+              "  pm.expect(body.recommendedAction).to.eql('BLOCK');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Harassment fixture uses policy decision path",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content\": \"You are worthless and pathetic.\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/detect/content-safety"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('returns the harassment policy action', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(pm.response.code).to.eql(200);",
+              "  pm.expect(body.categories).to.include.deep({ name: 'HARASSMENT', severity: 'MEDIUM' });",
+              "  pm.expect(body.recommendedAction).to.eql('SAFE_RESPONSE');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Crisis fixture returns safe-response template",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content\": \"TEST_FIXTURE_SELF_HARM_INTENT\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/detect/content-safety"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('returns the crisis-safe response metadata', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(pm.response.code).to.eql(200);",
+              "  pm.expect(body.decision).to.eql('SAFE_RESPONSE');",
+              "  pm.expect(body.safe).to.eql(true);",
+              "  pm.expect(body.responseTemplate).to.eql('SELF_HARM_SUPPORT_V1');",
+              "  pm.expect(pm.response.text()).to.not.include('TEST_FIXTURE_SELF_HARM_INTENT');",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

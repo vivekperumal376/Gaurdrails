@@ -1,0 +1,36 @@
+version: "1.0.0"
+tools:
+  searchKnowledge:
+    actions:
+      search:
+        allowedRoles: [moderation.user]
+        requiredArguments: [query]
+        allowedArguments: [query]
+        risk: LOW
+        approvalRequired: false
+  email:
+    actions:
+      send:
+        allowedRoles: [support-agent]
+        requiredArguments: [recipient, templateId]
+        allowedArguments: [recipient, templateId]
+        allowedRecipientDomains: [example.com]
+        risk: MEDIUM
+        approvalRequired: false
+  customer:
+    actions:
+      delete:
+        allowedRoles: [customer-admin]
+        requiredArguments: [customerId, tenantId]
+        allowedArguments: [customerId, tenantId]
+        tenantArgument: tenantId
+        risk: HIGH
+        approvalRequired: true
+  deployProduction:
+    actions:
+      deploy:
+        allowedRoles: [release-manager]
+        requiredArguments: [environment]
+        allowedArguments: [environment]
+        risk: CRITICAL
+        approvalRequired: true

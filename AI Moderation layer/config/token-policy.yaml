@@ -1,0 +1,8 @@
+version: "1.0.0"
+tokenizer: cl100k_base
+maxInputTokens: 20000
+maxRequestBytes: 1048576
+rateLimitWindowMs: 60000
+rateLimitMaxRequests: 60
+timeoutBudgetMs: 5000
+maxConcurrentRequests: 100

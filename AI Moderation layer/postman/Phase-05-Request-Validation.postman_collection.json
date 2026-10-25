@@ -1,0 +1,214 @@
+{
+  "info": {
+    "name": "Guardrail Gateway - Phase 05 Request Validation",
+    "description": "Focused Postman checks for schema validation on POST /api/v1/moderate.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "userToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Valid moderation request (passes validation)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content\": \"Please summarize the approved product document.\",\n  \"applicationId\": \"demo-rag-app\",\n  \"conversationId\": \"conv-001\",\n  \"metadata\": {\n    \"channel\": \"postman\",\n    \"locale\": \"en-GB\"\n  }\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/v1/moderate"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('valid schema reaches the next phase', function () { pm.response.to.have.status(501); });",
+            "pm.test('validation passed; moderation is still deferred', function () { pm.expect(pm.response.json().error).to.eql('NOT_IMPLEMENTED'); });"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "Missing content (400)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"applicationId\": \"demo-app\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/v1/moderate"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('returns 400 for missing content', function () { pm.response.to.have.status(400); });",
+            "pm.test('reports the safe content field error', function () {",
+            "  const body = pm.response.json();",
+            "  pm.expect(body.error).to.eql('INVALID_REQUEST');",
+            "  pm.expect(body.fields).to.include('content');",
+            "  pm.expect(body.requestId).to.be.a('string');",
+            "});"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "Numeric content (400)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content\": 12345\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/v1/moderate"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('returns 400 for numeric content', function () { pm.response.to.have.status(400); });",
+            "pm.test('identifies content without echoing the body', function () {",
+            "  const body = pm.response.json();",
+            "  pm.expect(body.error).to.eql('INVALID_REQUEST');",
+            "  pm.expect(body.fields).to.eql(['content']);",
+            "  pm.expect(pm.response.text()).not.to.include('12345');",
+            "});"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "Empty content (400)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content\": \"   \"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/v1/moderate"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('returns 400 for empty content', function () { pm.response.to.have.status(400); });",
+            "pm.test('reports INVALID_REQUEST', function () { pm.expect(pm.response.json().error).to.eql('INVALID_REQUEST'); });"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "Invalid application ID and unexpected nested metadata (400)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content\": \"Valid content.\",\n  \"applicationId\": \"../../unsafe\",\n  \"metadata\": {\n    \"channel\": \"postman\",\n    \"unexpected\": { \"nested\": true }\n  }\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/v1/moderate"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('returns 400 for invalid fields', function () { pm.response.to.have.status(400); });",
+            "pm.test('reports safe field names only', function () {",
+            "  const body = pm.response.json();",
+            "  pm.expect(body.error).to.eql('INVALID_REQUEST');",
+            "  pm.expect(body.fields).to.include('applicationId');",
+            "  pm.expect(body.fields).to.include('metadata');",
+            "  pm.expect(pm.response.text()).not.to.include('unsafe');",
+            "});"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "Unsupported content type (415)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "text/plain" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "content=plain-text",
+          "options": { "raw": { "language": "text" } }
+        },
+        "url": "{{baseUrl}}/api/v1/moderate"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('returns 415 for non-JSON content type', function () { pm.response.to.have.status(415); });",
+            "pm.test('returns safe media type error', function () { pm.expect(pm.response.json().error).to.eql('UNSUPPORTED_MEDIA_TYPE'); });"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "Malformed JSON (400)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"content\":",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/v1/moderate"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('returns 400 for malformed JSON', function () { pm.response.to.have.status(400); });",
+            "pm.test('does not disclose parser details', function () {",
+            "  pm.expect(pm.response.json().error).to.eql('INVALID_REQUEST');",
+            "  pm.expect(pm.response.text()).not.to.include('SyntaxError');",
+            "});"
+          ]
+        }
+      }]
+    }
+  ]
+}

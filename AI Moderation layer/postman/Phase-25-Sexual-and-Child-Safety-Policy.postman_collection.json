@@ -1,0 +1,72 @@
+{
+  "info": {
+    "name": "Guardrail Gateway - Phase 25 Sexual and Child-Safety Policy",
+    "description": "Uses only synthetic category labels and non-explicit fixtures. Child-safety fixtures block and create metadata-only security events; adult-content fixtures follow their separate configured policy. Real specialist content must use approved specialist processes/services.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3001" },
+    { "key": "testerToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Synthetic child-safety category blocks",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"content\": \"TEST_FIXTURE_CHILD_SAFETY_CATEGORY\"\n}" },
+        "url": "{{baseUrl}}/api/v1/detect/content-safety"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('blocks synthetic child-safety fixture without echoing it', function () {",
+        "  const body = pm.response.json();",
+        "  pm.expect(body.categories).to.include.deep({ name: 'CHILD_SAFETY', severity: 'HIGH' });",
+        "  pm.expect(body.recommendedAction).to.eql('BLOCK');",
+        "  pm.expect(pm.response.text()).to.not.include('TEST_FIXTURE_CHILD_SAFETY_CATEGORY');",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "Synthetic adult-content category follows separate policy",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"content\": \"TEST_FIXTURE_ADULT_CONTENT_CATEGORY\"\n}" },
+        "url": "{{baseUrl}}/api/v1/detect/content-safety"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('applies separate adult-content policy without echoing fixture', function () {",
+        "  const body = pm.response.json();",
+        "  pm.expect(body.categories).to.include.deep({ name: 'ADULT_CONTENT', severity: 'MEDIUM' });",
+        "  pm.expect(body.recommendedAction).to.eql('WARN');",
+        "  pm.expect(pm.response.text()).to.not.include('TEST_FIXTURE_ADULT_CONTENT_CATEGORY');",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "Ordinary text is not classified",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"content\": \"This is a routine product support response.\"\n}" },
+        "url": "{{baseUrl}}/api/v1/detect/content-safety"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('allows ordinary non-fixture content', function () {",
+        "  const body = pm.response.json();",
+        "  pm.expect(body.categories).to.eql([]);",
+        "  pm.expect(body.recommendedAction).to.eql('ALLOW');",
+        "});"
+      ] } }]
+    }
+  ]
+}

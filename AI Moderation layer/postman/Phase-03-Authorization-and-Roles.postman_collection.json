@@ -1,0 +1,126 @@
+{
+  "info": {
+    "name": "Guardrail Gateway - Phase 03 Authorization and Roles",
+    "description": "Checks trusted JWT-role authorization for admin, reviewer, and tester routes, including rejection of caller-supplied role escalation.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "userToken", "value": "" },
+    { "key": "testerToken", "value": "" },
+    { "key": "reviewerToken", "value": "" },
+    { "key": "adminToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Admin token can view policy (200)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "url": "{{baseUrl}}/api/v1/admin/policy"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('admin role is allowed', function () {",
+        "  pm.response.to.have.status(200);",
+        "  pm.expect(pm.response.json().policyVersion).to.be.a('string');",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "User token cannot view policy (403)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+        "url": "{{baseUrl}}/api/v1/admin/policy"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('non-admin role is forbidden', function () {",
+        "  pm.response.to.have.status(403);",
+        "  pm.expect(pm.response.json().error).to.eql('FORBIDDEN');",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "Caller cannot self-assign admin role (403)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{userToken}}" },
+          { "key": "X-Role", "value": "moderation.admin" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"role\": \"moderation.admin\",\n  \"roles\": [\"moderation.admin\"]\n}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/api/v1/admin/policy"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('body and header roles do not grant admin access', function () {",
+        "  pm.response.to.have.status(403);",
+        "  pm.expect(pm.response.json().error).to.eql('FORBIDDEN');",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "Reviewer token can list reviews (200)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{reviewerToken}}" }],
+        "url": "{{baseUrl}}/api/v1/reviews"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('reviewer role is allowed', function () {",
+        "  pm.response.to.have.status(200);",
+        "  pm.expect(pm.response.json().reviews).to.be.an('array');",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "User token cannot list reviews (403)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+        "url": "{{baseUrl}}/api/v1/reviews"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('non-reviewer role is forbidden', function () {",
+        "  pm.response.to.have.status(403);",
+        "  pm.expect(pm.response.json().error).to.eql('FORBIDDEN');",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "Tester token can access diagnostic route (501 placeholder)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"content\": \"Synthetic role authorization check.\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/api/v1/detect/pii"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('tester role passes authorization and reaches placeholder', function () {",
+        "  pm.response.to.have.status(501);",
+        "  pm.expect(pm.response.json().error).to.eql('NOT_IMPLEMENTED');",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "User token cannot access diagnostic route (403)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"content\": \"Synthetic role authorization check.\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/api/v1/detect/pii"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('non-tester role is forbidden', function () {",
+        "  pm.response.to.have.status(403);",
+        "  pm.expect(pm.response.json().error).to.eql('FORBIDDEN');",
+        "});"
+      ] } }]
+    }
+  ]
+}

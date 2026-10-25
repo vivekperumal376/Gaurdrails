@@ -1,0 +1,115 @@
+{
+  "info": {
+    "name": "Guardrail Gateway - Phase 08 PII Detection and Masking",
+    "description": "Postman validation for email and phone detection, masking, false-positive prevention, and redaction-safe logging.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "testerToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Valid email is masked (200)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content\": \"Email me at user@example.com.\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/detect/pii"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('returns 200 for PII detection', function () { pm.response.to.have.status(200); });",
+              "pm.test('masks the email value', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.matched).to.eql(true);",
+              "  pm.expect(body.category).to.eql('EMAIL_ADDRESS');",
+              "  pm.expect(body.recommendedAction).to.eql('MASK');",
+              "  pm.expect(body.sanitizedContent).to.include('<EMAIL_MASKED>');",
+              "  pm.expect(pm.response.text).to.not.include('user@example.com');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Multiple PII values are masked (200)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content\": \"Call +1 (415) 555-0147 or email admin@example.com.\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/detect/pii"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('returns 200 for multiple PII values', function () { pm.response.to.have.status(200); });",
+              "pm.test('masks phone and email together', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.matched).to.eql(true);",
+              "  pm.expect(body.recommendedAction).to.eql('MASK');",
+              "  pm.expect(body.sanitizedContent).to.include('<PHONE_MASKED>');",
+              "  pm.expect(body.sanitizedContent).to.include('<EMAIL_MASKED>');",
+              "  pm.expect(pm.response.text).to.not.include('admin@example.com');",
+              "  pm.expect(pm.response.text).to.not.include('415');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Non-PII text passes without false positive (200)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content\": \"The meeting starts at 10:30 am and the code is ALPHA-9.\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/detect/pii"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('allows non-PII content', function () { pm.response.to.have.status(200); });",
+              "pm.test('returns allow signal without masking', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.matched).to.eql(false);",
+              "  pm.expect(body.category).to.eql(null);",
+              "  pm.expect(body.recommendedAction).to.eql('ALLOW');",
+              "  pm.expect(body.sanitizedContent).to.eql('The meeting starts at 10:30 am and the code is ALPHA-9.');",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

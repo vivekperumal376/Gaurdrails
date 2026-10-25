@@ -1,0 +1,111 @@
+{
+  "info": {
+    "name": "Guardrail Gateway - Phase 09 Confidential Business Data Detection",
+    "description": "Postman validation for confidential business data detection, restricted classification, fail-closed handling, and safe redaction of sensitive content.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "testerToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Restricted content is blocked (200)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content\": \"RESTRICTED: customer beta rollout details for north-america\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/detect/confidential"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('returns 200 for restricted data', function () { pm.response.to.have.status(200); });",
+              "pm.test('flags restricted content without echoing sensitive text', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.matched).to.eql(true);",
+              "  pm.expect(body.classification).to.eql('RESTRICTED');",
+              "  pm.expect(body.recommendedAction).to.eql('BLOCK');",
+              "  pm.expect(body.ruleId).to.eql('CONF-RESTRICTED-001');",
+              "  pm.expect(body.sanitizedContent).to.eql('<CONFIDENTIAL_REDACTED>');",
+              "  pm.expect(pm.response.text).to.not.include('north-america');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Public content passes (200)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content\": \"The release notes are now available to all customers.\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/detect/confidential"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('returns 200 for public content', function () { pm.response.to.have.status(200); });",
+              "pm.test('allows non-restricted content', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.matched).to.eql(false);",
+              "  pm.expect(body.classification).to.eql(null);",
+              "  pm.expect(body.recommendedAction).to.eql('ALLOW');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Missing content field is rejected (400)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"message\": \"hello\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/detect/confidential"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('rejects invalid body shape', function () { pm.response.to.have.status(400); });",
+              "pm.test('returns invalid request metadata', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.error).to.eql('INVALID_REQUEST');",
+              "  pm.expect(body.fields).to.include('content');",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

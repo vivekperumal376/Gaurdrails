@@ -1,0 +1,114 @@
+{
+  "info": {
+    "name": "Guardrail Gateway - Phase 19 Output Schema and Code Validation",
+    "description": "Validates JSON output with caller-provided JSON Schema using Ajv and rejects executable markup in text-only mode. Content is not executed or echoed in validation failures.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3001" },
+    { "key": "userToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Valid JSON matches schema (ALLOW)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"content\": \"{\\\"answer\\\":\\\"14 days\\\",\\\"sources\\\":[\\\"DOC-101\\\"]}\",\n  \"schema\": {\n    \"type\": \"object\",\n    \"required\": [\"answer\", \"sources\"],\n    \"properties\": {\n      \"answer\": {\"type\": \"string\"},\n      \"sources\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}}\n    },\n    \"additionalProperties\": false\n  }\n}" },
+        "url": "{{baseUrl}}/api/v1/validate/output"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('allows valid schema-conforming output', function () {",
+        "  const body = pm.response.json();",
+        "  pm.expect(body.valid).to.eql(true);",
+        "  pm.expect(body.decision).to.eql('ALLOW');",
+        "  pm.expect(body.errors).to.eql([]);",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "Missing required or unexpected fields are blocked",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"content\": \"{\\\"answer\\\":\\\"14 days\\\",\\\"extra\\\":true}\",\n  \"schema\": {\"type\":\"object\",\"required\":[\"answer\",\"sources\"],\"properties\":{\"answer\":{\"type\":\"string\"},\"sources\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}},\"additionalProperties\":false}\n}" },
+        "url": "{{baseUrl}}/api/v1/validate/output"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('blocks schema violations without echoing generated content', function () {",
+        "  const body = pm.response.json();",
+        "  pm.expect(body.valid).to.eql(false);",
+        "  pm.expect(body.decision).to.eql('BLOCK');",
+        "  pm.expect(body.errors.length).to.be.above(0);",
+        "  pm.expect(pm.response.text()).to.not.include('14 days');",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "Invalid JSON is blocked",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"content\": \"{not-json\",\n  \"schema\": {\"type\":\"object\"}\n}" },
+        "url": "{{baseUrl}}/api/v1/validate/output"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('blocks invalid JSON safely', function () {",
+        "  const body = pm.response.json();",
+        "  pm.expect(body.valid).to.eql(false);",
+        "  pm.expect(body.decision).to.eql('BLOCK');",
+        "  pm.expect(body.errors).to.include('INVALID_JSON');",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "Executable markup is blocked in text mode",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"content\": \"<script>alert('x')</script>\",\n  \"mode\": \"text\"\n}" },
+        "url": "{{baseUrl}}/api/v1/validate/output"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('blocks executable markup in text-only mode', function () {",
+        "  const body = pm.response.json();",
+        "  pm.expect(body.valid).to.eql(false);",
+        "  pm.expect(body.decision).to.eql('BLOCK');",
+        "  pm.expect(body.errors).to.include('EXECUTABLE_MARKUP');",
+        "});"
+      ] } }]
+    },
+    {
+      "name": "Invalid JSON Schema is blocked",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"content\": \"{}\",\n  \"schema\": {\"type\":\"not-a-json-type\"}\n}" },
+        "url": "{{baseUrl}}/api/v1/validate/output"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('blocks an invalid schema definition', function () {",
+        "  const body = pm.response.json();",
+        "  pm.expect(body.valid).to.eql(false);",
+        "  pm.expect(body.decision).to.eql('BLOCK');",
+        "  pm.expect(body.errors).to.include('INVALID_SCHEMA');",
+        "});"
+      ] } }]
+    }
+  ]
+}

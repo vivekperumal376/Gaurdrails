@@ -1,0 +1,192 @@
+{
+  "info": {
+    "name": "Guardrail Gateway - Phase 06 Limits",
+    "description": "Postman validation for configured token, payload, rate, timeout, and concurrency limits. Rate-limit request: run only that request for 61 iterations and reset its counter first.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "userToken", "value": "" },
+    { "key": "testerToken", "value": "" },
+    { "key": "rateTestIteration", "value": "0" }
+  ],
+  "item": [
+    {
+      "name": "Count tokens for ordinary input",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" },
+          { "key": "X-Application-Id", "value": "phase06-token-diagnostic" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content\": \"Please summarize the approved product document.\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/v1/validate/tokens"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('returns a token diagnostic', function () { pm.response.to.have.status(200); });",
+            "pm.test('reports configured token limit and decision', function () {",
+            "  const body = pm.response.json();",
+            "  pm.expect(body.tokenCount).to.be.a('number').and.greaterThan(0);",
+            "  pm.expect(body.maxInputTokens).to.be.a('number');",
+            "  pm.expect(body.valid).to.eql(true);",
+            "  pm.expect(body.recommendedAction).to.eql('ALLOW');",
+            "});"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "Token diagnostic above policy maximum (BLOCK)",
+      "event": [{
+        "listen": "prerequest",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.request.body.update(JSON.stringify({ content: 'a '.repeat(21000) }));"
+          ]
+        }
+      }, {
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('diagnostic reports token-limit decision', function () { pm.response.to.have.status(200); });",
+            "pm.test('reports invalid and BLOCK above configured max', function () {",
+            "  const body = pm.response.json();",
+            "  pm.expect(body.tokenCount).to.be.greaterThan(body.maxInputTokens);",
+            "  pm.expect(body.valid).to.eql(false);",
+            "  pm.expect(body.recommendedAction).to.eql('BLOCK');",
+            "});"
+          ]
+        }
+      }],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" },
+          { "key": "X-Application-Id", "value": "phase06-token-over-limit" }
+        ],
+        "body": { "mode": "raw", "raw": "{}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/api/v1/validate/tokens"
+      }
+    },
+    {
+      "name": "Moderation input above maximum (413)",
+      "event": [{
+        "listen": "prerequest",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.request.body.update(JSON.stringify({ content: 'a '.repeat(21000), applicationId: 'phase06-token-limit' }));"
+          ]
+        }
+      }, {
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('blocks moderation input above max tokens', function () { pm.response.to.have.status(413); });",
+            "pm.test('returns token limit signal', function () {",
+            "  const body = pm.response.json();",
+            "  pm.expect(body.error).to.eql('TOKEN_LIMIT_EXCEEDED');",
+            "  pm.expect(body.recommendedAction).to.eql('BLOCK');",
+            "  pm.expect(body.tokenCount).to.be.greaterThan(body.maxInputTokens);",
+            "});"
+          ]
+        }
+      }],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/api/v1/moderate"
+      }
+    },
+    {
+      "name": "Payload above byte limit (413)",
+      "event": [{
+        "listen": "prerequest",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.request.body.update(JSON.stringify({ content: 'x'.repeat(1100000) }));"
+          ]
+        }
+      }, {
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('rejects body above configured byte size', function () { pm.response.to.have.status(413); });",
+            "pm.test('returns safe payload limit error', function () {",
+            "  pm.expect(pm.response.json().error).to.eql('PAYLOAD_TOO_LARGE');",
+            "  pm.expect(pm.response.text()).not.to.include('xxxxxxxx');",
+            "});"
+          ]
+        }
+      }],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/api/v1/moderate"
+      }
+    },
+    {
+      "name": "Rate limit per application (run 61 iterations)",
+      "event": [{
+        "listen": "prerequest",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "const iteration = Number(pm.collectionVariables.get('rateTestIteration') || '0') + 1;",
+            "pm.collectionVariables.set('rateTestIteration', String(iteration));"
+          ]
+        }
+      }, {
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "const iteration = Number(pm.collectionVariables.get('rateTestIteration'));",
+            "if (iteration <= 60) {",
+            "  pm.test('requests within limit reach the endpoint', function () { pm.response.to.have.status(501); });",
+            "} else {",
+            "  pm.test('request 61 is rate limited', function () { pm.response.to.have.status(429); });",
+            "  pm.test('returns RATE_LIMIT_EXCEEDED', function () { pm.expect(pm.response.json().error).to.eql('RATE_LIMIT_EXCEEDED'); });",
+            "}"
+          ]
+        }
+      }],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"content\": \"Rate-limit test request.\",\n  \"applicationId\": \"phase06-rate-test\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/v1/moderate"
+      }
+    }
+  ]
+}

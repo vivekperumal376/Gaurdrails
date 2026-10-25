@@ -1,0 +1,136 @@
+{
+  "info": {
+    "name": "Guardrail Gateway - Phase 13 RAG Document Access Control",
+    "description": "Checks same-tenant role access, cross-tenant denial, inactive/expired documents, and that caller-supplied user roles or similarity scores cannot override verified JWT authorization.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "userToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Same tenant and allowed role (ALLOW)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"user\": {\"tenantId\": \"TENANT-A\", \"roles\": [\"claims-agent\"]},\n  \"document\": {\"documentId\": \"DOC-101\", \"tenantId\": \"TENANT-A\", \"classification\": \"CONFIDENTIAL\", \"allowedRoles\": [\"claims-agent\"], \"status\": \"ACTIVE\"}\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/rag/authorize"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('returns 200 for an ACL decision', function () { pm.response.to.have.status(200); });",
+              "pm.test('allows matching tenant and JWT role', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.authorized).to.eql(true);",
+              "  pm.expect(body.recommendedAction).to.eql('ALLOW');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cross tenant remains blocked despite user body and similarity (BLOCK)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"user\": {\"tenantId\": \"TENANT-B\", \"roles\": [\"claims-agent\"]},\n  \"similarityScore\": 0.99,\n  \"document\": {\"documentId\": \"DOC-201\", \"tenantId\": \"TENANT-B\", \"classification\": \"CONFIDENTIAL\", \"allowedRoles\": [\"claims-agent\"], \"status\": \"ACTIVE\"}\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/rag/authorize"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('returns 200 for a blocked ACL decision', function () { pm.response.to.have.status(200); });",
+              "pm.test('blocks cross-tenant access despite request claims and similarity', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.authorized).to.eql(false);",
+              "  pm.expect(body.recommendedAction).to.eql('BLOCK');",
+              "  pm.expect(body.reason).to.eql('TENANT_MISMATCH');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inactive document is blocked",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"document\": {\"documentId\": \"DOC-DELETED\", \"tenantId\": \"TENANT-A\", \"classification\": \"CONFIDENTIAL\", \"allowedRoles\": [\"claims-agent\"], \"status\": \"DELETED\"}\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/rag/authorize"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('blocks inactive documents', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.authorized).to.eql(false);",
+              "  pm.expect(body.reason).to.eql('DOCUMENT_INACTIVE');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Expired document is blocked",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"document\": {\"documentId\": \"DOC-EXPIRED\", \"tenantId\": \"TENANT-A\", \"classification\": \"CONFIDENTIAL\", \"allowedRoles\": [\"claims-agent\"], \"status\": \"ACTIVE\", \"expiresAt\": \"2020-01-01T00:00:00.000Z\"}\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/rag/authorize"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('blocks expired documents', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.authorized).to.eql(false);",
+              "  pm.expect(body.reason).to.eql('DOCUMENT_EXPIRED');",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

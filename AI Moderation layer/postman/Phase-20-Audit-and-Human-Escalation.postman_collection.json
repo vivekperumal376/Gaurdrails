@@ -1,0 +1,121 @@
+{
+  "info": {
+    "name": "Guardrail Gateway - Phase 20 Audit and Human Escalation",
+    "description": "Validates escalation review creation, request correlation, reviewer-only access, and safe response handling. Audit metadata is emitted to the API's structured log; raw request content is never included in audit events.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3001" },
+    { "key": "userToken", "value": "" },
+    { "key": "reviewerToken", "value": "" },
+    { "key": "reviewId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Create an escalated review (201)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"decision\": \"ESCALATE\",\n  \"reasonCode\": \"HIGH_IMPACT_ACTION\"\n}" },
+        "url": "{{baseUrl}}/api/v1/reviews"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('creates a pending review', function () {",
+              "  pm.response.to.have.status(201);",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.decision).to.eql('ESCALATE');",
+              "  pm.expect(body.status).to.eql('PENDING');",
+              "  pm.expect(body.reviewId).to.match(/^REV-[0-9A-F-]+$/);",
+              "  pm.collectionVariables.set('reviewId', body.reviewId);",
+              "  pm.expect(pm.response.headers.get('X-Request-Id')).to.be.a('string');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reviewer can list pending reviews (200)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{reviewerToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/v1/reviews"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('reviewer can list the newly created review', function () {",
+              "  pm.response.to.have.status(200);",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.reviews.some(function (review) { return review.reviewId === pm.collectionVariables.get('reviewId'); })).to.eql(true);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Non-reviewer cannot list reviews (403)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/v1/reviews"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('non-reviewer is forbidden', function () {",
+              "  pm.response.to.have.status(403);",
+              "  pm.expect(pm.response.json().error).to.eql('FORBIDDEN');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Non-escalated submission is rejected (400)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"decision\": \"ALLOW\",\n  \"reasonCode\": \"HIGH_IMPACT_ACTION\"\n}" },
+        "url": "{{baseUrl}}/api/v1/reviews"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('rejects review creation without ESCALATE decision', function () {",
+              "  pm.response.to.have.status(400);",
+              "  pm.expect(pm.response.json().error).to.eql('INVALID_REQUEST');",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

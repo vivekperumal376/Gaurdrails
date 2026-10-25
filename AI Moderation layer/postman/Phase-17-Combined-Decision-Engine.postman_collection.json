@@ -1,0 +1,104 @@
+{
+  "info": {
+    "name": "Guardrail Gateway - Phase 17 Combined Decision Engine",
+    "description": "Exercises the configured deterministic priority ordering for each documented action combination. Requires a moderation.tester token.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3001" },
+    { "key": "testerToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "BLOCK + MASK = BLOCK",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"findings\": [{\"control\": \"PII\", \"recommendedAction\": \"MASK\"}, {\"control\": \"INJECTION\", \"recommendedAction\": \"BLOCK\"}]\n}" },
+        "url": "{{baseUrl}}/api/v1/decision"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('decision is BLOCK', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().decision).to.eql('BLOCK'); });"] } }]
+    },
+    {
+      "name": "ESCALATE + WARN = ESCALATE",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"findings\": [{\"control\": \"REVIEW\", \"recommendedAction\": \"ESCALATE\"}, {\"control\": \"CONTENT\", \"recommendedAction\": \"WARN\"}]\n}" },
+        "url": "{{baseUrl}}/api/v1/decision"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('decision is ESCALATE', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().decision).to.eql('ESCALATE'); });"] } }]
+    },
+    {
+      "name": "SAFE_RESPONSE + MASK = SAFE_RESPONSE",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"findings\": [{\"control\": \"PII\", \"recommendedAction\": \"MASK\"}, {\"control\": \"SAFETY\", \"recommendedAction\": \"SAFE_RESPONSE\"}]\n}" },
+        "url": "{{baseUrl}}/api/v1/decision"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('decision is SAFE_RESPONSE', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().decision).to.eql('SAFE_RESPONSE'); });"] } }]
+    },
+    {
+      "name": "MASK + WARN = MASK",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"findings\": [{\"control\": \"PII\", \"recommendedAction\": \"MASK\"}, {\"control\": \"CONTENT\", \"recommendedAction\": \"WARN\"}]\n}" },
+        "url": "{{baseUrl}}/api/v1/decision"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('decision is MASK', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().decision).to.eql('MASK'); });"] } }]
+    },
+    {
+      "name": "WARN + ALLOW = WARN",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"findings\": [{\"control\": \"CONTENT\", \"recommendedAction\": \"WARN\"}, {\"control\": \"TOKENS\", \"recommendedAction\": \"ALLOW\"}]\n}" },
+        "url": "{{baseUrl}}/api/v1/decision"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('decision is WARN', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().decision).to.eql('WARN'); });"] } }]
+    },
+    {
+      "name": "ALLOW only = ALLOW",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"findings\": [{\"control\": \"TOKENS\", \"recommendedAction\": \"ALLOW\"}]\n}" },
+        "url": "{{baseUrl}}/api/v1/decision"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('decision is ALLOW', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().decision).to.eql('ALLOW'); });"] } }]
+    },
+    {
+      "name": "Empty findings default to ALLOW",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"findings\": []\n}" },
+        "url": "{{baseUrl}}/api/v1/decision"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('empty findings decision is ALLOW', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().decision).to.eql('ALLOW'); });"] } }]
+    }
+  ]
+}

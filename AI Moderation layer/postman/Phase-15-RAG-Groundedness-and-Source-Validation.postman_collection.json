@@ -1,0 +1,169 @@
+{
+  "info": {
+    "name": "Guardrail Gateway - Phase 15 RAG Groundedness and Source Validation",
+    "description": "Deterministic citation syntax, approved/rejected source membership, and lexical support checks. The grounding signal is not semantic proof; supply sources approved by Phase 14 and rejectedSourceIds from that validation when available.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "userToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Valid citation and source support (ALLOW)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"What is the cancellation period?\",\n  \"response\": \"The cancellation period is 14 days [DOC-101].\",\n  \"sources\": [\n    {\"sourceId\": \"DOC-101\", \"text\": \"Cancellation period: 14 days.\"}\n  ]\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/rag/validate-grounding"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('returns 200 for grounding evaluation', function () { pm.response.to.have.status(200); });",
+              "pm.test('allows a valid citation with lexical source support', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.citationValid).to.eql(true);",
+              "  pm.expect(body.groundingSignal).to.eql('SUPPORTED');",
+              "  pm.expect(body.recommendedAction).to.eql('ALLOW');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Unknown source citation is blocked",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"What is the cancellation period?\",\n  \"response\": \"The cancellation period is 14 days [DOC-404].\",\n  \"sources\": [\n    {\"sourceId\": \"DOC-101\", \"text\": \"Cancellation period: 14 days.\"}\n  ]\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/rag/validate-grounding"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('blocks a citation to an unknown source', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.citationValid).to.eql(false);",
+              "  pm.expect(body.groundingSignal).to.eql('UNKNOWN_SOURCE');",
+              "  pm.expect(body.recommendedAction).to.eql('BLOCK');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Phase 14 rejected source citation is blocked",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"What is the cancellation period?\",\n  \"response\": \"The cancellation period is 14 days [DOC-REJECTED].\",\n  \"sources\": [\n    {\"sourceId\": \"DOC-REJECTED\", \"text\": \"Cancellation period: 14 days.\"}\n  ],\n  \"rejectedSourceIds\": [\"DOC-REJECTED\"]\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/rag/validate-grounding"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('blocks citation to rejected context', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.citationValid).to.eql(false);",
+              "  pm.expect(body.groundingSignal).to.eql('REJECTED_SOURCE');",
+              "  pm.expect(body.recommendedAction).to.eql('BLOCK');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "No approved evidence produces warning",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"What is the cancellation period?\",\n  \"response\": \"The cancellation period is 14 days.\",\n  \"sources\": []\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/rag/validate-grounding"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('warns when there is no evidence', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.citationValid).to.eql(false);",
+              "  pm.expect(body.groundingSignal).to.eql('INSUFFICIENT_EVIDENCE');",
+              "  pm.expect(body.recommendedAction).to.eql('WARN');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cited source does not support answer (WARN)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"What is the cancellation period?\",\n  \"response\": \"The cancellation period is 14 days [DOC-101].\",\n  \"sources\": [\n    {\"sourceId\": \"DOC-101\", \"text\": \"Customer support is available on weekdays.\"}\n  ]\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/rag/validate-grounding"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('warns when cited text does not lexically support answer', function () {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.citationValid).to.eql(true);",
+              "  pm.expect(body.groundingSignal).to.eql('UNSUPPORTED');",
+              "  pm.expect(body.recommendedAction).to.eql('WARN');",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

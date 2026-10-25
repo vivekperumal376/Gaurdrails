@@ -1,0 +1,35 @@
+{
+  "info": {
+    "name": "Guardrail Gateway - Phase 26 Self-Harm and Crisis Handling",
+    "description": "Uses only the architecture's controlled synthetic fixture. Returns a safe-response template identifier; actual crisis response copy must be reviewed and supplied by the responsible organization.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3001" },
+    { "key": "testerToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Controlled crisis fixture returns SAFE_RESPONSE",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{testerToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"content\": \"TEST_FIXTURE_SELF_HARM_INTENT\"\n}" },
+        "url": "{{baseUrl}}/api/v1/detect/content-safety"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('routes controlled fixture to approved safe-response template', function () {",
+        "  const body = pm.response.json();",
+        "  pm.expect(body.decision).to.eql('SAFE_RESPONSE');",
+        "  pm.expect(body.safe).to.eql(true);",
+        "  pm.expect(body.responseTemplate).to.eql('SELF_HARM_SUPPORT_V1');",
+        "  pm.expect(body.recommendedAction).to.eql('SAFE_RESPONSE');",
+        "  pm.expect(pm.response.text()).to.not.include('TEST_FIXTURE_SELF_HARM_INTENT');",
+        "});"
+      ] } }]
+    }
+  ]
+}
